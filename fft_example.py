@@ -34,14 +34,15 @@ def get_input(input_file=None, n=101, s=20, sym=True) -> (torch.Tensor, int):
         df = pd.read_csv(input_file, header=None, names=['probe', 'intensity'])
         x2_ = df['intensity'].values
         ml = x2_.size
-        truncate_signal = st.sidebar.number_input(f"Truncate Signal Min", value=1e-6, step=1e-6)
-        t = (x2_ > truncate_signal).nonzero()[0]
+        truncate_signal = st.sidebar.number_input(f"Truncate Signal Min", value=0.0, step=1e-2)
+        t = (np.abs(x2_) > truncate_signal).nonzero()[0]
 
         dp_range = st.sidebar.slider("data points range", value=[int(t[0]), int(t[-1])])
-        st.sidebar.markdown(f"data points: {dp_range[1]-dp_range[0]}/{t[-1]-t[0]}/{ml}")
+        dp_range_max = int(t[-1]) - int(t[0])
+        st.sidebar.markdown(f"data points: {dp_range[1]-dp_range[0]}/{dp_range_max}/{ml}")
         st.sidebar.markdown("数据点数量影响基波空间频率`K0`")
-        st.sidebar.markdown("数据点间隔影响基波空间频率`K0`")
-        return torch.tensor(x2_[slice(*dp_range)]), ml
+        # st.sidebar.markdown("数据点间隔影响基波空间频率`K0`")
+        return torch.tensor(x2_[slice(*dp_range)]), t[-1]-t[0]
 
 
 class AppV1:
@@ -64,7 +65,7 @@ class AppV1:
         ffte = FFTEngine(algo)
         ffte_module = torch.jit.script(ffte)
         print(ffte_module)
-        x_input, max_length = get_input(input_file=input_file_, n=n_, s=s_, sym=sym_)
+        x_input, n_samples = get_input(input_file=input_file_, n=n_, s=s_, sym=sym_)
 
         a, b = ffte_module(torch.tensor(x_input))
 
@@ -75,9 +76,21 @@ class AppV1:
         sp = np.abs(a.numpy())
         spectrum_limit = st.sidebar.slider(
             'spectrum',
-            value=[0, int(max_length/2)])
-        st.sidebar.write(f"FFT length: {spectrum_limit[1] - spectrum_limit[0]}/{len(sp)}")
-        st.bar_chart(pd.DataFrame(sp[slice(*spectrum_limit)]))
+            value=[0, len(sp)])
+        sp_length = spectrum_limit[1] - spectrum_limit[0]
+        st.sidebar.write(f"FFT length: {sp_length}/{len(sp)}")
+
+        fs = st.sidebar.number_input('fs (sample freq)', min_value=1000.0, max_value=100000000.0, value=11422.5, step=0.01)
+
+        fft_resolution = fs / n_samples
+        st.sidebar.markdown(f"fs/N = `{fs}`/`{n_samples}` = `{fft_resolution}`")
+        st.sidebar.markdown(f"FFT resolution (fs/N): {sp_length}/{len(sp)}")
+        spectrum = pd.DataFrame(
+                {'k': (np.arange(sp_length) * fft_resolution).astype('int'), 'I': sp[slice(*spectrum_limit)]}
+            ).set_index('k')
+        st.bar_chart(
+            spectrum
+        )
 
         st.markdown("## Reconstructed signals ")
         st.bar_chart(pd.DataFrame(b.resolve_conj().numpy().astype('float')))
