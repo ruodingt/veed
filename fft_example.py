@@ -1,3 +1,6 @@
+import os
+from glob import glob
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -40,14 +43,16 @@ def get_input(input_file=None, n=101, s=20, sym=True) -> (torch.Tensor, int):
         dp_range = st.sidebar.slider("data points range", value=[int(t[0]), int(t[-1])])
         dp_range_max = int(t[-1]) - int(t[0])
         st.sidebar.markdown(f"data points: {dp_range[1]-dp_range[0]}/{dp_range_max}/{ml}")
-        st.sidebar.markdown("数据点数量影响基波空间频率`K0`")
+        st.sidebar.markdown("`採樣率 & 数据点数量 影响 空间频率分辨率 （df = fs/N）`")
         # st.sidebar.markdown("数据点间隔影响基波空间频率`K0`")
         return torch.tensor(x2_[slice(*dp_range)]), t[-1]-t[0]
 
 
 class AppV1:
     def exec(self):
-        input_file_options = [f"data/{2 ** x}cm-1.csv" for x in [0, 1, 2, 3, 4, 5]][::-1]
+
+        # input_file_options = list(os.walk("data"))
+        input_file_options = list(glob("data/**/*.csv"))
 
         input_file_ = st.sidebar.selectbox('input_file', options=[*input_file_options, None])
         algo = st.sidebar.selectbox('algorithm', options=['rfft', 'fft', 'hfft'])
@@ -84,7 +89,7 @@ class AppV1:
 
         fft_resolution = fs / n_samples
         st.sidebar.markdown(f"fs/N = `{fs}`/`{n_samples}` = `{fft_resolution}`")
-        st.sidebar.markdown(f"FFT resolution (fs/N): {sp_length}/{len(sp)}")
+        st.sidebar.markdown(f"FFT resolution (fs/N): {fs}/{n_samples}")
         spectrum = pd.DataFrame(
                 {'k': (np.arange(sp_length) * fft_resolution).astype('int'), 'I': sp[slice(*spectrum_limit)]}
             ).set_index('k')
